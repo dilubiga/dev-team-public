@@ -7,6 +7,3 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
-
-# Personal scratch / build prompts
-build-agent-playbook-prompt.md

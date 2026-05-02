@@ -139,12 +139,71 @@ These are the **mandatory human gates**. The pipeline will explicitly pause and 
 ## Quick Start
 
 > **Important**: Steps must be followed in order. Each step depends on the previous one completing successfully.
->
-> **Using Azure DevOps Boards instead of GitHub?** Skip steps 0–2 below and follow the [Azure DevOps Boards Mode](#azure-devops-boards-mode) section's setup block, then resume at step 3 (which is backend-agnostic — the on-call agent branches on `tracker:` automatically). Step 4 onwards uses `tracker_*` verbs that work in either mode.
 
-### 0. Create the project and repo (once per project family)
+Pick the tracker mode you want and follow the matching track end-to-end:
 
-Before bootstrapping a project, create the GitHub Project board and link the repo to it:
+| Mode | Best for | Quick Start |
+|---|---|---|
+| **File** | Solo work, ephemeral experiments, offline | [§ Quick Start — File mode](#quick-start--file-mode) |
+| **GitHub Issues** | Open-source projects, GitHub-native teams, public roadmaps | [§ Quick Start — GitHub Issues mode](#quick-start--github-issues-mode) |
+| **Azure DevOps Boards** | Microsoft / enterprise stacks, ADO-tracked engagements | [§ Quick Start — Azure DevOps Boards mode](#quick-start--azure-devops-boards-mode) |
+
+All three tracks share the same agents and the same `/execute` skill. Only the underlying transport — file renames, GitHub Issues + Project board, or ADO work-item tags — differs.
+
+---
+
+### Quick Start — File mode
+
+Simplest path. No remote, no auth. Tasks live as markdown files under `tracker/`.
+
+#### 1. Bootstrap a new project
+
+Run from the **repo root** (`dev-team/`), not from `agent-playbook/`:
+
+```bash
+bash ./agent-playbook/scripts/init-project.sh /path/to/your-project quant-finance
+# Template options: quant-finance | web-app | cli-tool | data-pipeline
+```
+
+Verify before moving on:
+
+```powershell
+Get-ChildItem -Recurse /path/to/your-project | Select-Object FullName
+# Expect: CLAUDE.md, .claude/, tracker/, _docs/
+```
+
+#### 2. Fill in CLAUDE.md
+
+Open `/path/to/your-project/CLAUDE.md` and fill in:
+- Project name and overview
+- Tech stack
+- Skills Path (must match `SUPERPOWERS_SKILLS_DIR` in `.claude/project.env`)
+- Architecture notes
+- Domain-specific rules
+- Leave `tracker:` and `agent_variant:` at their `file` defaults
+
+#### 3. Create your first task
+
+```bash
+cp .claude/templates/task.todo.md tracker/001-my-first-feature.todo.md
+# Edit the file with your task description (see templates/task.todo.md for the shape)
+```
+
+#### 4. Run the pipeline
+
+In Claude Code, from your project directory:
+
+```bash
+/execute
+```
+
+Done. Skip to [Code review](#code-review-any-mode) if you also want to run the refactoring reviewer.
+
+---
+
+### Quick Start — GitHub Issues mode
+
+#### 0. Create the GitHub Project and repo (once per project family)
 
 ```bash
 # Create project board + repo and link them in one step:
@@ -169,121 +228,125 @@ bash ./agent-playbook/scripts/gh-setup.sh \
   --link-only
 ```
 
-> **Note:** If the script fails on the project step, refresh your gh scopes first:
+> If the script fails on the project step, refresh your `gh` scopes:
 > `gh auth refresh -h github.com -s project,read:project`
 
----
-
-### 1. Bootstrap a new project
-
-Run from the **repo root** (`dev-team/`), not from `agent-playbook/`:
+#### 1. Bootstrap with `--github`
 
 ```bash
-bash ./agent-playbook/scripts/init-project.sh /path/to/your-project quant-finance
-# Template options: quant-finance | web-app | cli-tool | data-pipeline
-
-# With GitHub Issues tracking:
 bash ./agent-playbook/scripts/init-project.sh /path/to/your-project quant-finance --github
 
-# With Azure DevOps Boards tracking (org/project/repo must already exist):
-bash ./agent-playbook/scripts/init-project.sh /path/to/your-project quant-finance --azure
-
-# On Windows (PowerShell + Git Bash):
+# Windows (PowerShell + Git Bash):
 bash ./agent-playbook/scripts/init-project.sh "/c/Users/<you>/projects/your-project" quant-finance --github
 ```
 
-`--github` and `--azure` are mutually exclusive. The default (no flag) is file-based mode.
+#### 2. Fill in CLAUDE.md and `.claude/project.env`
 
-**Verify** the project was created before moving on:
+In `CLAUDE.md`: project name / overview / tech stack / architecture / domain rules. Set `agent_variant: github`.
 
-```powershell
-# PowerShell:
-Get-ChildItem -Recurse /path/to/your-project | Select-Object FullName
-# You should see: CLAUDE.md, .claude/, tracker/, _docs/
-```
-
-### 2. Fill in CLAUDE.md and project.env
-
-Open `/path/to/your-project/CLAUDE.md` and fill in:
-- Project name and overview
-- Tech stack
-- Skills Path (must match `SUPERPOWERS_SKILLS_DIR` in `.claude/project.env`)
-- Architecture notes
-- Domain-specific rules
-- Agent Variant (`file` or `github`)
-
-Then open `/path/to/your-project/.claude/project.env`. `init-project.sh` already
-filled in `GH_OWNER` from your `gh api user` login. Resolve and fill in:
+In `.claude/project.env`, `init-project.sh` already filled in `GH_OWNER` from `gh api user`. Resolve and fill in:
 - `GH_REPO`, `GH_PROJECT_NUMBER`, `GH_PROJECT_ID`
 - The `GH_FIELD_*`, `GH_PIPELINE_*`, `GH_AGENT_*`, `GH_STATUS_*` IDs
 - `SUPERPOWERS_SKILLS_DIR` if your skills don't live at the default relative path
 
-The exact `gh project field-list` commands that produce each ID are
-documented in the per-project `.claude/PORTING.md` (also seeded by
-`init-project.sh`).
+The exact `gh project field-list` commands that produce each ID are documented in the per-project `.claude/PORTING.md` §4 (also seeded by `init-project.sh`).
 
-### 3. Initialise the project repo (On-Call)
-
-**You must `cd` into the new project directory first.** The On-Call agent reads `CLAUDE.md` from the current directory, decides which remote-host platform to use based on the `tracker:` line, and provisions the repo accordingly.
+#### 3. Initialise the repo (On-Call agent)
 
 ```bash
-# 1. Change into the project directory:
 cd /path/to/your-project
-
-# 2. Run the On-Call agent (single line — do NOT use backslash line-continuation):
 claude --agent .claude/agents/oncall-engineer.md "Initialise the repo for $(pwd)"
-
-# On Windows (PowerShell):
-cd "C:\Users\<you>\projects\your-project"
-claude --agent .claude/agents/oncall-engineer.md "Initialise the repo for $PWD"
 ```
 
-The On-Call agent will:
-1. Read your `CLAUDE.md` for project details and the `tracker:` mode
-2. Verify the appropriate CLI is authenticated (`gh auth status` for GitHub, `az account show` + `azure-devops` extension for Azure)
-3. Ask you: repo visibility (GitHub only — ADO repos inherit project visibility), branch structure, protection rules
-4. Run `git init`, create `.gitignore`, make an initial commit, then either:
-   - **GitHub mode**: `gh repo create`, optional Project board create/link, run `init-github-tracker.sh` to seed labels
-   - **Azure mode**: verify the existing ADO project / repo, add Azure Repos as `origin`, push, run `init-azure-tracker.sh` to verify the connection
-   - **File mode**: skip the remote setup entirely
+The agent verifies `gh auth status`, asks for repo visibility / branch structure / protection rules, runs `git init`, creates `.gitignore`, makes the initial commit, runs `gh repo create` + optional Project board create/link, and runs `init-github-tracker.sh` to seed labels.
 
-### 4. Create your first task
+#### 4. Create your first issue
 
-**File-based mode:**
 ```bash
-cp .claude/templates/task.todo.md tracker/001-my-first-feature.todo.md
-# Edit the file with your task description
-```
-
-**GitHub Issues mode:**
-```bash
-source .claude/env.sh   # exports GH_OWNER, GH_PROJECT_NUMBER, etc.
-gh issue create \
+source .claude/env.sh
+tracker_create_issue \
   --title "My first feature" \
   --body "Description of what needs to be done" \
-  --label "needs-grooming,priority-medium,role-pm" \
-  --project "${GH_OWNER}/${GH_PROJECT_NUMBER}"
+  --type feature --priority medium --role pm --state needs-grooming
 ```
 
-### 5. Run the pipeline
-
-In Claude Code, from your project directory:
+#### 5. Run the pipeline
 
 ```bash
-# Run the full pipeline on the next batch of todo tasks:
 /execute
-
-# Or launch a specific agent manually:
-claude --agent .claude/agents/product-manager.md "Groom task tracker/001-my-first-feature.todo.md"
-claude --agent .claude/agents/software-engineer.md "Implement task tracker/001-my-first-feature.groomed.md"
-claude --agent .claude/agents/tester.md "Verify task tracker/001-my-first-feature.in-progress.md"
 ```
 
-### 6. Run a code review
+---
+
+### Quick Start — Azure DevOps Boards mode
+
+**Prerequisites** (the playbook does not create these — provision them in the ADO web UI first):
+- An ADO **organization, project, and Azure Repos repository** that already exist
+- `az` CLI authenticated (`az login` — or `AZURE_DEVOPS_EXT_PAT` exported for headless / CI)
+- `azure-devops` extension installed: `az extension add --name azure-devops`
+- Process template should be **Agile** (default). Scrum / CMMI / Basic require setting `AZ_STATE_*` env vars in `.claude/project.env` — see [PORTING.md.template](agent-playbook/templates/PORTING.md.template) §4-AZ c.
+
+#### 0. Verify the existing ADO project / repo and emit the env block
+
+```bash
+bash ./agent-playbook/scripts/azdo-setup.sh \
+  --org <your-azure-org> \
+  --project <your-azure-project> \
+  --repo <your-azure-repo>
+```
+
+This verifies connectivity, then prints the `AZ_*` export block to paste into `.claude/project.env` in step 2.
+
+#### 1. Bootstrap with `--azure`
+
+```bash
+bash ./agent-playbook/scripts/init-project.sh /path/to/your-project quant-finance --azure
+```
+
+#### 2. Fill in CLAUDE.md and `.claude/project.env`
+
+In `CLAUDE.md`: project name / overview / tech stack / architecture / domain rules. Set `agent_variant: azure` and fill in the `azdo_*` block (org / project / repo, plus optional area-path / iteration-path / work-item-type).
+
+In `.claude/project.env`, paste the `AZ_*` exports printed by `azdo-setup.sh` in step 0. Optionally set `AZ_STATE_*` if your process template isn't Agile.
+
+#### 3. Initialise the repo (On-Call agent)
+
+```bash
+cd /path/to/your-project
+claude --agent .claude/agents/oncall-engineer.md "Initialise the repo for $(pwd)"
+```
+
+The agent verifies `az` auth + the extension, asks about branch structure (no public/private question — ADO repos inherit project visibility), runs `git init`, creates `.gitignore`, makes the initial commit, adds the existing Azure Repos repository as `origin`, pushes, and runs `init-azure-tracker.sh` to verify the end-to-end connection.
+
+#### 4. Create your first work item
+
+```bash
+source .claude/env.sh
+tracker_create_issue \
+  --title "My first feature" \
+  --body "Description of what needs to be done" \
+  --type feature --priority medium --role pm --state needs-grooming
+```
+
+Same `tracker_*` verb as GitHub mode — the dispatcher routes to the Azure backend automatically.
+
+#### 5. Run the pipeline
+
+```bash
+/execute
+```
+
+---
+
+### Code review (any mode)
+
+The refactoring reviewer is invoked manually, not by `/execute`. It works the same in all three modes.
 
 ```bash
 claude --agent .claude/agents/refactoring-reviewer.md "Review the src/pricing/ module"
 ```
+
+The reviewer produces a report under `tracker/refactor-review-<date>.md` and (if asked) creates one backlog item per finding via `tracker_create_issue` — so the resulting tasks land in whichever backend the project uses.
 
 ---
 
@@ -552,69 +615,17 @@ are identical to GitHub mode. The transport layer differs: tags on work items
 replace labels, the work-item Comments REST API replaces issue comments, and
 WIQL queries replace `gh issue list`.
 
-### When to Use Which
+### How it works
 
-| Backend | Best for |
-|---|---|
-| `tracker: file` | Solo work, ephemeral experiments, offline / air-gapped |
-| `tracker: github-issues` | Open-source projects, GitHub-native teams, public roadmaps |
-| `tracker: azure-boards` | Microsoft / enterprise stacks, ADO-tracked engagements, mixed Boards + Repos workflows |
-
-### How It Works
-
-Same as GitHub mode (PM grooms → SWE implements → QA verifies → PM accepts → TechWriter docs)
-except agents call `tracker_*` verbs instead of raw `az` calls. The
-`lib/tracker/tracker_azure.sh` backend translates verbs into `az boards`
-subcommands and direct REST calls for comments. Agents are **mode-agnostic**:
-the same prompt runs against file, GitHub, or Azure backends.
-
-### Prerequisites
-
-- `az` CLI installed and authenticated (`az login` or `AZURE_DEVOPS_EXT_PAT` for CI)
-- `azure-devops` extension: `az extension add --name azure-devops`
-- An ADO **organization, project, and Azure Repos repository** already created
-  in the web UI (the playbook does not create them — Phase B scope is
-  "assume project and repo exist")
-- Process template should be **Agile** (the default). Scrum / CMMI / Basic
-  require setting the four `AZ_STATE_*` env vars in `.claude/project.env`
-  (no source edit) — see `templates/PORTING.md.template` §4-AZ c for the
-  per-process mappings.
+Same pipeline as GitHub mode (PM grooms → SWE implements → QA verifies → PM accepts → TechWriter docs). Agents call `tracker_*` verbs; the `lib/tracker/tracker_azure.sh` backend translates them into `az boards` subcommands and direct REST calls for comments. Agents are **mode-agnostic**: the same prompt runs against file, GitHub, or Azure backends.
 
 ### Setup
 
-```bash
-# 0. Verify the existing ADO org/project/repo and emit the project.env block:
-bash ./agent-playbook/scripts/azdo-setup.sh \
-  --org <your-azure-org> \
-  --project <your-azure-project> \
-  --repo <your-azure-repo>
+The end-to-end Azure setup walk-through lives in [Quick Start — Azure DevOps Boards mode](#quick-start--azure-devops-boards-mode) above. Reference docs:
 
-# 1. Bootstrap the project with --azure:
-bash ./agent-playbook/scripts/init-project.sh /path/to/your-project quant-finance --azure
-
-# 2. Edit /path/to/your-project/.claude/project.env and paste the AZ_* exports
-#    that azdo-setup.sh printed in step 0.
-
-# 3. Verify the connection (also runs automatically at the end of init-project.sh
-#    if AZ_ORG / AZ_PROJECT are filled in):
-bash ./agent-playbook/scripts/init-azure-tracker.sh
-```
-
-### Creating Your First Work Item
-
-```bash
-source .claude/env.sh
-tracker_create_issue \
-  --title "Your first task" \
-  --body "Description of what needs to be done" \
-  --type feature --priority medium --role pm --state needs-grooming
-```
-
-Then run `/execute` in Claude Code — the agents will pick it up via the
-tracker abstraction.
-
-See `process/AZURE-TRACKER-GUIDE.md` for the tag vocabulary, transition matrix,
-and quick-reference verb list.
+- [`process/AZURE-TRACKER-GUIDE.md`](process/AZURE-TRACKER-GUIDE.md) — tag vocabulary, transition matrix, quick-reference verb list
+- [`templates/PORTING.md.template`](templates/PORTING.md.template) §4-AZ — env-var resolution and `AZ_STATE_*` overrides for non-Agile process templates
+- [`USER-INPUTS.md`](USER-INPUTS.md) §3-AZ — canonical placeholder / env-var table
 
 ---
 

@@ -1,0 +1,356 @@
+# Porting the dev-team to this project
+
+This dev-team (`.claude/agents/`) is portable. The agents themselves contain
+no project-specific identifiers — every GitHub Project ID, owner/repo name,
+and skills path is read from `.claude/project.env` (sourced automatically by
+`.claude/env.sh`).
+
+If you're seeing this file, `init-project.sh` already created the scaffolding.
+Work through this checklist top-to-bottom to finish wiring the team to your
+GitHub project board. **Items marked _MANUAL_ require human action; the
+agents cannot do them.**
+
+---
+
+## 1. What's already in place
+
+`init-project.sh` has created (skipping anything that already existed):
+
+```
+.claude/
+├── agents/                # the dev-team — do not edit
+├── commands/              # /execute slash command
+├── env.sh                 # toolchain bootstrap; auto-sources project.env,
+│                          # derives TRACKER_BACKEND from CLAUDE.md, and
+│                          # sources lib/tracker/tracker.sh
+├── lib/tracker/           # tracker abstraction (dispatcher + 3 backends)
+├── project.env            # ← per-project: edit this (step 4)
+├── PORTING.md             # this file
+├── copilot-instructions.md
+├── settings.local.json    # local-only — gitignore it
+└── templates/
+CLAUDE.md                  # ← per-project: edit this (step 3)
+_docs/
+tracker/
+```
+
+---
+
+## 2. Prerequisites _MANUAL_
+
+Before the team can run, the host machine must have:
+
+- [ ] **Python toolchain available**: `python` / `python3` / `py` on PATH (or installed at one of the locations probed by `env.sh:_find_python`)
+- [ ] **`pytest`, `ruff`, `black`, `isort` installed** in that interpreter (verifiable via `source .claude/env.sh && check_toolchain`)
+- [ ] **Superpowers skills present** at the path declared by `${SUPERPOWERS_SKILLS_DIR}` in `project.env` — each subdirectory should contain a `SKILL.md`
+- [ ] **`jq` installed** — used by every `gh project item-list … | jq …` pipeline and by the Azure backend's WIQL parsing
+- [ ] **`bats-core` installed** _(only if you want to run the tracker test suite — `make test-tracker`)_: `npm install -g bats`
+
+Then, depending on the `tracker:` mode set in `CLAUDE.md`:
+
+- For `tracker: github-issues`:
+  - [ ] **`gh` CLI authenticated**: `gh auth status` returns OK
+- For `tracker: azure-boards`:
+  - [ ] **`az` CLI authenticated**: `az account show` returns OK
+  - [ ] **`azure-devops` extension installed**: `az extension add --name azure-devops`
+  - [ ] **PAT scope (if running headless / CI)**: `AZURE_DEVOPS_EXT_PAT` exported with at least *Work Items: Read & Write* and *Code: Read* scopes. Interactive workstations can rely on `az login` instead.
+
+---
+
+## 3. Edit `CLAUDE.md` for this project _MANUAL_
+
+The agents read these fields:
+
+- [ ] `## Overview` — short description of what the project does
+- [ ] `## Tech Stack` — languages, libraries, versions
+- [ ] `## Skills Path` — path to superpowers skills (must match `SUPERPOWERS_SKILLS_DIR` in `project.env`)
+- [ ] `## Architecture` — directory layout
+- [ ] `## Entry Points` — test / lint / format / run commands
+- [ ] `## QA Standards` — domain-specific rules (this section is **mandatory**; the tester agent fails the task if it's missing or empty). `init-project.sh` injected the template you chose; customise it.
+- [ ] `### Task Tracker` — `tracker:` field (`file`, `github-issues`, or `azure-boards`). `.claude/env.sh` reads this line and exports `TRACKER_BACKEND` automatically; you do not set it by hand. **Note:** `azure-boards` has all 12 verbs implemented in `lib/tracker/tracker_azure.sh`, but the surrounding bootstrap (init-azure-tracker script, `AZ_*` variables in `project.env.template`, on-call agent Azure branch, AZURE-TRACKER-GUIDE) is not yet shipped — only `file` and `github-issues` are bootstrappable end-to-end via `init-project.sh`.
+- [ ] `### GitHub Project` — fill in `github_project_action`, `github_project_number`, `project:`, `repo:` if using GitHub Issues mode
+- [ ] `### Agent Variant` — `github` or `file`
+
+---
+
+## 4. Edit `.claude/project.env` _MANUAL + scriptable_
+
+This is the file that tells every agent which GitHub project board to talk
+to and where to find the superpowers skills. `init-project.sh` populated
+`GH_OWNER` automatically; the rest is yours.
+
+### 4a. Repo identity (manual)
+
+Open `.claude/project.env` and set:
+
+```bash
+export GH_REPO="<your-repo>"
+export GH_PROJECT_NUMBER=<your-project-number>          # see step 4b
+export GH_PROJECT_ID="<PVT_kw...>"    # see step 4b
+```
+
+(`GH_OWNER` should already be filled in. Adjust if you're targeting a
+different account or org.)
+
+### 4b. Find the project number and project ID (scriptable)
+
+If you already know the project number (visible in the URL: `github.com/users/<your-github-user>/projects/<your-project-number>`):
+
+```bash
+gh project view <your-project-number> --owner <your-github-user> --format json | jq '{number: .number, id: .id, title: .title}'
+```
+
+Copy `number` → `GH_PROJECT_NUMBER`, `id` → `GH_PROJECT_ID`.
+
+### 4c. Find field IDs (scriptable)
+
+```bash
+gh project field-list <your-project-number> --owner <your-github-user> --format json | jq '.fields[] | {name, id, type}'
+```
+
+Map the output to the env vars by matching on `name`:
+
+| Field name in your board | Variable in `project.env`  |
+|---|---|
+| `Pipeline` (single-select) | `GH_FIELD_PIPELINE`  |
+| `Agent` (single-select)    | `GH_FIELD_AGENT`     |
+| `Status` (single-select)   | `GH_FIELD_STATUS`    |
+| `QA Cycle` (number)        | `GH_FIELD_QA_CYCLE`  |
+
+If your board uses different field names, either rename them on the board or
+rename the variables consistently across all agent files.
+
+### 4d. Find option IDs (scriptable)
+
+```bash
+gh project field-list <your-project-number> --owner <your-github-user> --format json \
+  | jq '.fields[] | select(.name=="Pipeline") | .options[] | {name, id}'
+```
+
+Repeat for `Agent` and `Status`. Map each option's `id` to its variable:
+
+**Pipeline options** (`GH_FIELD_PIPELINE`):
+
+| Option name | Variable                       |
+|---|---|
+| Backlog     | `GH_PIPELINE_BACKLOG`          |
+| Development | `GH_PIPELINE_DEVELOPMENT`      |
+| QA          | `GH_PIPELINE_QA`               |
+| Acceptance  | `GH_PIPELINE_ACCEPTANCE`       |
+| Documentation | `GH_PIPELINE_DOCUMENTATION`  |
+| Done        | `GH_PIPELINE_DONE`             |
+| Blocked     | `GH_PIPELINE_BLOCKED`          |
+
+**Agent options** (`GH_FIELD_AGENT`):
+
+| Option name | Variable             |
+|---|---|
+| SWE         | `GH_AGENT_SWE`       |
+| QA          | `GH_AGENT_QA`        |
+| PM          | `GH_AGENT_PM`        |
+| TechWriter  | `GH_AGENT_TECHWRITER`|
+| Human       | `GH_AGENT_HUMAN`     |
+
+**Status options** (`GH_FIELD_STATUS`):
+
+| Option name      | Variable             |
+|---|---|
+| Backlog          | `GH_STATUS_BACKLOG`  |
+| In documentation | `GH_STATUS_IN_DOCS`  |
+| Done             | `GH_STATUS_DONE`     |
+
+If any option is missing on your board, **create it on the board first** — do
+not invent placeholders in `project.env`. The agents will fail loudly if an
+ID is unset.
+
+### 4e. Set the superpowers skills path
+
+```bash
+export SUPERPOWERS_SKILLS_DIR="../../github/superpowers/skills"
+```
+
+The default is relative to the project root. Override with an absolute path
+if your skills live elsewhere (e.g. a different folder on this machine, or a
+shared user-global location). Verify the path resolves:
+
+```bash
+source .claude/env.sh
+ls "${SUPERPOWERS_SKILLS_DIR}/test-driven-development/SKILL.md"
+```
+
+### 4f. Required GitHub Issue labels _MANUAL_
+
+The agents transition issues with these labels. If `init-project.sh` was
+run with `--github`, it already invoked `init-github-tracker.sh` to create
+them. Verify with:
+
+```bash
+gh label list --repo "${GH_OWNER}/${GH_REPO}" | grep -E "needs-grooming|role-pm|qa-cycle-1"
+```
+
+If labels are missing:
+
+```bash
+bash .claude/../scripts/init-github-tracker.sh "${GH_OWNER}/${GH_REPO}"
+```
+
+---
+
+## 4-AZ. Edit `.claude/project.env` for Azure DevOps mode _MANUAL + scriptable_
+
+Skip this section if you are not using `tracker: azure-boards`.
+
+### 4-AZ a. Org / project / repo identity (manual)
+
+Open `.claude/project.env` and set:
+
+```bash
+export AZ_ORG="<your-azure-org>"          # slug ("myorg") or full URL ("https://dev.azure.com/myorg")
+export AZ_PROJECT="<your-azure-project>"  # case-sensitive project name
+export AZ_REPO="<your-azure-repo>"        # case-sensitive Azure Repos repository name
+```
+
+Optional fields, leave blank for defaults:
+
+```bash
+export AZ_AREA_PATH=""           # default: AZ_PROJECT (the project root)
+export AZ_ITERATION_PATH=""      # blank → backlog (no sprint)
+export AZ_WORK_ITEM_TYPE=""      # default: "Task" — set to "User Story", "Bug", etc. as needed
+```
+
+### 4-AZ b. Verify the connection (scriptable)
+
+```bash
+az account show >/dev/null && echo "az: logged in"
+az devops project show --org "https://dev.azure.com/${AZ_ORG#https://dev.azure.com/}" --project "${AZ_PROJECT}" --query name
+az repos show --org "https://dev.azure.com/${AZ_ORG#https://dev.azure.com/}" --project "${AZ_PROJECT}" --repository "${AZ_REPO}" --query name
+```
+
+All three commands should print without error. If `az devops` is not a known
+command, run `az extension add --name azure-devops` first.
+
+### 4-AZ c. Process template assumption
+
+`tracker_azure.sh` maps the pipeline to ADO `System.State` values from the
+**Agile** process template (`New` / `Active` / `Resolved` / `Closed`). If
+your project uses Scrum, CMMI, or Basic, set the four `AZ_STATE_*` env
+vars in `.claude/project.env` instead of editing the source — this keeps
+the override per-project and survives re-bootstraps:
+
+```bash
+# Scrum:
+export AZ_STATE_NEW="New"
+export AZ_STATE_ACTIVE="Committed"
+export AZ_STATE_RESOLVED="Done"
+export AZ_STATE_CLOSED="Done"
+
+# CMMI:
+export AZ_STATE_NEW="Proposed"
+export AZ_STATE_ACTIVE="Active"
+export AZ_STATE_RESOLVED="Resolved"
+export AZ_STATE_CLOSED="Closed"
+
+# Basic:
+export AZ_STATE_NEW="To Do"
+export AZ_STATE_ACTIVE="Doing"
+export AZ_STATE_RESOLVED="Doing"
+export AZ_STATE_CLOSED="Done"
+```
+
+Confirm your project's actual state names with:
+
+```bash
+az boards work-item show --id <existing-id> -o json | jq '.fields["System.State"]'
+```
+
+The state-vocabulary tags themselves (`needs-grooming`, `ready-for-dev`, …)
+are process-independent and never need to be overridden.
+
+### 4-AZ d. Authentication for headless / CI runs
+
+Interactive workstations: `az login` once and you are done.
+
+Non-interactive (CI, agents running unattended): export `AZURE_DEVOPS_EXT_PAT`
+to a Personal Access Token with at least:
+
+- **Work Items**: Read & Write (create / update / comment)
+- **Code**: Read (so `az repos show` succeeds)
+
+The PAT is read by the `azure-devops` extension automatically; you do not
+pass it as a flag.
+
+### 4-AZ e. Initial sanity check
+
+If `init-project.sh` was run with `--azure`, it already invoked
+`init-azure-tracker.sh`. To re-run:
+
+```bash
+bash .claude/../scripts/init-azure-tracker.sh
+```
+
+This verifies the connection, prints the tag vocabulary the agents use,
+and warns if the project's process template is not one of those mapped by
+the backend.
+
+---
+
+## 5. Verify the team is wired correctly
+
+Run this from the project root:
+
+```bash
+source .claude/env.sh
+check_toolchain && echo "toolchain OK"
+echo "GH_OWNER=${GH_OWNER}, GH_REPO=${GH_REPO}, GH_PROJECT_NUMBER=${GH_PROJECT_NUMBER}"
+echo "GH_PROJECT_ID=${GH_PROJECT_ID}"
+ls "${SUPERPOWERS_SKILLS_DIR}" | head
+```
+
+You should see:
+
+- `toolchain OK`
+- All four printed values populated
+- A list of skill directory names (`brainstorming`, `test-driven-development`, etc.)
+
+If any line errors out, fix it before running the team — every agent depends
+on these.
+
+---
+
+## 6. Quick smoke test (optional)
+
+Create a trivial issue on the new repo:
+
+```bash
+gh issue create --repo "${GH_OWNER}/${GH_REPO}" \
+  --title "[SMOKE] Hello world" \
+  --body "Smoke test for the dev-team setup." \
+  --label "needs-grooming,priority-low,role-pm"
+```
+
+Then in Claude Code, run `/execute` (or invoke the `product-manager` agent
+on that issue) and confirm:
+
+- The PM agent grooms it without errors
+- The label transitions to `ready-for-dev,role-swe`
+- The project board's Pipeline column moves the item to **Development**
+
+If both transitions work, the team is fully portable on this host.
+
+---
+
+## What changes vs. what stays the same
+
+| File                              | Per-project? | Action            |
+|---|---|---|
+| `.claude/agents/*.md`             | No           | Copy verbatim     |
+| `.claude/env.sh`                  | No           | Copy verbatim     |
+| `.claude/project.env`             | **Yes**      | Edit per step 4   |
+| `.claude/copilot-instructions.md` | Maybe        | Edit if standards differ |
+| `.claude/templates/`              | No           | Copy verbatim     |
+| `.claude/commands/`               | No           | Copy verbatim     |
+| `CLAUDE.md`                       | **Yes**      | Edit per step 3   |
+| `.claude/settings.local.json`     | **Yes** (machine) | Do not commit |
+
+The dev-team is portable. The board's structure, labels, and the skills
+location are the only per-project knobs.

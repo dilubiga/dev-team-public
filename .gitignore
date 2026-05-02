@@ -1,0 +1,12 @@
+# Claude Code state (per-machine, auto-generated — never commit)
+.claude/settings.json
+.claude/settings.local.json
+
+# Python bytecode (embeds absolute paths from the dev machine — never commit)
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Personal scratch / build prompts
+build-agent-playbook-prompt.md

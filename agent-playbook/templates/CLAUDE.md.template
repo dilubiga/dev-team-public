@@ -1,0 +1,92 @@
+# Project: [PROJECT_NAME]
+
+## Overview
+<!-- What this project does, who uses it, what it produces (2-3 sentences). -->
+
+## Tech Stack
+<!-- Language, framework, key libraries and versions. -->
+
+## Coding Standards
+See: .claude/copilot-instructions.md
+
+## Skills Path
+<!-- Path to the obra/superpowers skill directory. Used by every agent's
+     "Superpowers Skills" section. Must match SUPERPOWERS_SKILLS_DIR in
+     .claude/project.env. Default assumes the layout:
+       <projects-root>/
+         github/superpowers/skills/
+         <your-projects>/<this-project>/
+-->
+Skills: ../../github/superpowers/skills/
+
+## Architecture
+<!-- Key directories and their purpose. -->
+
+## Entry Points
+<!-- How to run the project, run tests, lint, format. -->
+
+## QA Standards
+<!-- Paste the contents of ONE qa-standards template here, or reference it by path.
+     Options:
+       .claude/templates/qa-standards/quant-finance.md
+       .claude/templates/qa-standards/web-app.md
+       .claude/templates/qa-standards/cli-tool.md
+       .claude/templates/qa-standards/data-pipeline.md
+     You can also paste the content directly here and customize it. -->
+
+## Agent Configuration
+
+### Batch Size
+<!-- How many tasks /execute processes per batch (default: 2). -->
+batch_size: 2
+
+### Task Tracker
+<!-- "file" (default), "github-issues", or "azure-boards".
+     .claude/env.sh reads this line and exports TRACKER_BACKEND automatically.
+     NB: "azure-boards" has all 12 verbs implemented in lib/tracker/tracker_azure.sh,
+     but the surrounding bootstrap (init-azure-tracker script, AZ_* env vars in
+     project.env, on-call agent Azure branch) is not yet shipped — only "file"
+     and "github-issues" are bootstrappable end-to-end via init-project.sh. -->
+tracker: file
+
+### GitHub Project (if using github-issues mode)
+<!-- Fill in BEFORE running the On-Call agent to initialise the repo.
+     github_project_action: create | link | (blank to skip)
+     github_project_name:   only needed when action is "create"
+     github_project_number: only needed when action is "link" -->
+github_project_action:
+github_project_name:
+github_project_number:
+
+<!-- After On-Call runs (or you fill in .claude/project.env by hand), the
+     resolved references go below: -->
+<!-- project: [OWNER]/N -->
+<!-- repo: [OWNER]/[REPO_NAME] -->
+
+### Azure DevOps Project (if using azure-boards mode)
+<!-- Fill in BEFORE running the On-Call agent. The org/project/repo must
+     already exist in Azure DevOps — On-Call does not create them.
+     azdo_org:       organization slug or URL (e.g. "myorg" or "https://dev.azure.com/myorg")
+     azdo_project:   Azure DevOps project name (case-sensitive)
+     azdo_repo:      Azure Repos repository name (case-sensitive)
+     azdo_area_path: optional; defaults to azdo_project
+     azdo_iteration_path: optional; leave blank for backlog
+     azdo_work_item_type: optional; defaults to "Task" (Agile process). -->
+azdo_org:
+azdo_project:
+azdo_repo:
+azdo_area_path:
+azdo_iteration_path:
+azdo_work_item_type:
+
+### Agent Variant
+<!-- "github" for GitHub Issues, "azure" for Azure DevOps Boards, or
+     "file" for file-based tracking. Must match the tracker: line above. -->
+agent_variant: file
+
+## Domain-Specific Rules
+<!-- Project-specific constraints beyond copilot-instructions.md.
+     e.g. "All monetary values in EUR", "src/legacy/ is read-only". -->
+
+## Dependencies Between Tasks
+<!-- Optional: e.g. "TASK-003 depends on TASK-001 (pricer must exist before Greeks)". -->

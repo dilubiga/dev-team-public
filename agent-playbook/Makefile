@@ -1,10 +1,18 @@
 # Top-level Makefile for the agent-playbook repo.
 #
-# Runs the tracker abstraction's bats and pytest suites.
+# Targets:
+#   build   — assemble agents/<role>.md and chatmodes/<role>.chatmode.md
+#             from agents/_body/<role>.body.md (run after editing a body).
+#   test    — run all bats + pytest suites.
+#   check   — re-run `build` and fail if working tree changes (CI gate).
+#   clean   — remove generated chatmodes (agents/ are committed).
 
-.PHONY: test test-tracker test-tracker-bats test-tracker-pytest
+.PHONY: build test test-tracker test-tracker-bats test-tracker-pytest test-scripts check clean
 
-test: test-tracker
+build:
+	@bash scripts/build-prompts.sh
+
+test: test-tracker test-scripts
 
 test-tracker: test-tracker-bats test-tracker-pytest
 
@@ -18,3 +26,17 @@ test-tracker-pytest:
 	else \
 		echo "test-tracker-pytest: no Python tests yet — skipping."; \
 	fi
+
+test-scripts:
+	@bats scripts/tests/
+
+# Re-run build and fail if the working tree changes (CI gate).
+check: build
+	@if ! git diff --quiet -- agents/ chatmodes/; then \
+		echo "ERROR: 'make build' changed tracked files. Re-run it locally and commit."; \
+		git --no-pager diff -- agents/ chatmodes/; \
+		exit 1; \
+	fi
+
+clean:
+	@rm -rf chatmodes/

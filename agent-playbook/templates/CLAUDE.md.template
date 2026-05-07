@@ -10,14 +10,14 @@
 See: .claude/copilot-instructions.md
 
 ## Skills Path
-<!-- Path to the obra/superpowers skill directory. Used by every agent's
-     "Superpowers Skills" section. Must match SUPERPOWERS_SKILLS_DIR in
-     .claude/project.env. Default assumes the layout:
-       <projects-root>/
-         github/superpowers/skills/
-         <your-projects>/<this-project>/
--->
-Skills: ../../github/superpowers/skills/
+<!-- Source: https://github.com/obra/superpowers
+     Install once per host:
+       Claude Code:  /plugin install superpowers@claude-plugins-official
+       Other tools:  git clone https://github.com/obra/superpowers ~/superpowers
+
+     env.sh auto-detects the install path; this line is informational only.
+     Override by setting SUPERPOWERS_SKILLS_DIR in .claude/project.env. -->
+Skills: (auto-detected by .claude/env.sh — see .claude/PORTING.md §4e)
 
 ## Architecture
 <!-- Key directories and their purpose. -->

@@ -70,7 +70,7 @@ table above.
 | `# Project: [PROJECT_NAME]` | Your project's name |
 | `## Overview` | 2-3 sentences: what the project does, who uses it, what it produces |
 | `## Tech Stack` | Languages, frameworks, key libraries with versions |
-| `## Skills Path` | Path to the obra/superpowers skills directory (must match `SUPERPOWERS_SKILLS_DIR` in `.claude/project.env`). Default: `../../github/superpowers/skills/` |
+| `## Skills Path` | Informational — `env.sh` auto-detects the [obra/superpowers](https://github.com/obra/superpowers) skills directory. Override only by setting `SUPERPOWERS_SKILLS_DIR` in `.claude/project.env`. See `PORTING.md` §4e for install instructions. |
 | `## Architecture` | Key directories and their purpose |
 | `## Entry Points` | How to run the project, run tests, lint, format |
 | `## QA Standards` | Auto-injected from one of the four QA standard templates if `init-project.sh` created CLAUDE.md fresh; otherwise paste from `.claude/templates/qa-standards/<template>.md` |
@@ -184,7 +184,7 @@ Verify your project's actual state names with:
 
 | Variable | What to enter |
 |---|---|
-| `SUPERPOWERS_SKILLS_DIR` | Path to the directory holding `<skill>/SKILL.md` files. Default: `../../github/superpowers/skills` (relative to the project root). Use an absolute path if your skills live elsewhere. Verify with `ls "${SUPERPOWERS_SKILLS_DIR}/test-driven-development/SKILL.md"` after sourcing. |
+| `SUPERPOWERS_SKILLS_DIR` | **Usually unset.** `env.sh` auto-detects, in order: an explicit value here, then `~/.claude/plugins/cache/claude-plugins-official/superpowers/*/skills` (Claude Code plugin), then `~/superpowers/skills`, `~/github/superpowers/skills`, `~/code/superpowers/skills`, `../../github/superpowers/skills`. Install: `/plugin install superpowers@claude-plugins-official` (Claude Code) or `git clone https://github.com/obra/superpowers ~/superpowers` (other tools). Override here with an absolute path only if auto-detect picks the wrong one. Verify with `ls "${SUPERPOWERS_SKILLS_DIR}/test-driven-development/SKILL.md"` after sourcing. |
 
 ---
 

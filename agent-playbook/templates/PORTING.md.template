@@ -163,19 +163,41 @@ If any option is missing on your board, **create it on the board first** — do
 not invent placeholders in `project.env`. The agents will fail loudly if an
 ID is unset.
 
-### 4e. Set the superpowers skills path
+### 4e. Install superpowers and verify the skills path
+
+The dev-team uses [obra/superpowers](https://github.com/obra/superpowers) for
+process discipline (TDD, brainstorming, debugging, …).
+
+**Install once per host** — pick whichever fits your tool:
 
 ```bash
-export SUPERPOWERS_SKILLS_DIR="../../github/superpowers/skills"
+# Claude Code (preferred):
+/plugin install superpowers@claude-plugins-official
+
+# Other tools (Copilot CLI, etc.):
+git clone https://github.com/obra/superpowers ~/superpowers
 ```
 
-The default is relative to the project root. Override with an absolute path
-if your skills live elsewhere (e.g. a different folder on this machine, or a
-shared user-global location). Verify the path resolves:
+`env.sh` auto-detects the install — you usually do **not** need to set
+`SUPERPOWERS_SKILLS_DIR` by hand. It checks, in order:
+
+1. `SUPERPOWERS_SKILLS_DIR` if you set it in `project.env` (overrides everything)
+2. `~/.claude/plugins/cache/claude-plugins-official/superpowers/*/skills` (Claude Code plugin path; latest version wins)
+3. `~/superpowers/skills`, `~/github/superpowers/skills`, `~/code/superpowers/skills`, `../../github/superpowers/skills`
+
+Verify the resolution succeeded:
 
 ```bash
 source .claude/env.sh
 ls "${SUPERPOWERS_SKILLS_DIR}/test-driven-development/SKILL.md"
+```
+
+If neither auto-detect nor an explicit override resolves, `env.sh` prints a
+warning pointing at this section. Set `SUPERPOWERS_SKILLS_DIR` manually in
+`project.env` to an absolute path to override:
+
+```bash
+export SUPERPOWERS_SKILLS_DIR="/absolute/path/to/superpowers/skills"
 ```
 
 ### 4f. Required GitHub Issue labels _MANUAL_

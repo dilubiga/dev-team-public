@@ -378,7 +378,13 @@ auto-sources `.claude/project.env` at the start of every agent run.
 - `GH_OWNER`, `GH_REPO`, `GH_PROJECT_NUMBER`, `GH_PROJECT_ID` — repo and board identity
 - `GH_FIELD_PIPELINE`, `GH_FIELD_AGENT`, `GH_FIELD_STATUS`, `GH_FIELD_QA_CYCLE` — board field IDs
 - `GH_PIPELINE_*`, `GH_AGENT_*`, `GH_STATUS_*` — single-select option IDs
-- `SUPERPOWERS_SKILLS_DIR` — where the obra/superpowers skills are installed
+- `SUPERPOWERS_SKILLS_DIR` — where the [obra/superpowers](https://github.com/obra/superpowers) skills are installed (auto-detected by `env.sh` from the Claude Code plugin path or common git-clone locations; override here only if needed)
+
+> **Install superpowers** (one-time, host-wide):
+> - **Claude Code:** `/plugin install superpowers@claude-plugins-official`
+> - **Other tools** (Copilot CLI, etc.): `git clone https://github.com/obra/superpowers ~/superpowers`
+>
+> `env.sh` finds it automatically in either case.
 
 **What every agent does at startup:**
 
